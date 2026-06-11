@@ -321,6 +321,23 @@ export async function createComment(projectId, mrIid, body) {
  * });
  */
 export async function createInlineComment(projectId, mrIid, opts) {
+  // Build position using camelCase keys to match @gitbeaker/rest's DiscussionNotePositionOptions (Camelize<schema>)
+  // The library internally calls decamelizeKeys() and then qs.stringify() to produce position[...] form fields.
+  // old_path must be explicitly set (same as new_path) — GitLab's line_code hash uses it.
+  const position = {
+    positionType: "text",
+    baseSha: opts.position.base_sha,
+    startSha: opts.position.start_sha,
+    headSha: opts.position.head_sha,
+    newPath: opts.path,
+    oldPath: opts.path,
+    newLine: opts.line,
+  };
+
+  // Debug: log the position being sent (first 500 chars)
+  const posPreview = JSON.stringify(position);
+  console.log(`[gitlab] createInlineComment position: ${posPreview.slice(0, 500)}`);
+
   return wrap(
     (
       /** @type {string} */ a,
@@ -331,16 +348,7 @@ export async function createInlineComment(projectId, mrIid, opts) {
     projectId,
     mrIid,
     opts.body,
-    {
-      position: {
-        position_type: "text",
-        base_sha: opts.position.base_sha,
-        start_sha: opts.position.start_sha,
-        head_sha: opts.position.head_sha,
-        new_path: opts.path,
-        new_line: opts.line,
-      },
-    },
+    { position },
   );
 }
 

@@ -48,21 +48,31 @@ export async function gitlabOutputNode(state) {
 
     for (const ic of inlineComments) {
       console.log(`[graph]       └─ Posting inline on ${ic.path}:${ic.line}...`);
+      // Build position data for logging (don't log full body — it can be long)
+      const posData = {
+        path: ic.path,
+        line: ic.line,
+        shaRefs: {
+          base: diffRefs?.base_sha?.slice(0, 8),
+          start: diffRefs?.start_sha?.slice(0, 8),
+          head: diffRefs?.head_sha?.slice(0, 8),
+        },
+        allShasPresent: !!(diffRefs?.base_sha && diffRefs?.start_sha && diffRefs?.head_sha),
+      };
+      if (!posData.allShasPresent) {
+        console.warn(`[graph]       └─ ⚠️  Incomplete diff_refs: ${JSON.stringify(posData.shaRefs)}`);
+      }
       try {
         await gitlab.createInlineComment(project_id, mr_id, {
           body: ic.body,
           path: ic.path,
           line: ic.line,
-          position: {
-            base_sha: diffRefs.base_sha,
-            start_sha: diffRefs.start_sha,
-            head_sha: diffRefs.head_sha,
-          },
+          position: diffRefs,
         });
         inlineSuccess++;
       } catch (err) {
         inlineFail++;
-        console.error(`[graph]       └─ ❌ Inline failed: ${err.message}`);
+        console.error(`[graph]       └─ ❌ Inline failed on ${ic.path}:${ic.line}: ${err.message}`);
       }
     }
     results.push(`Inline comments: ${inlineSuccess} posted, ${inlineFail} failed`);
