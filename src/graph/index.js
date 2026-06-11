@@ -151,11 +151,12 @@ export function buildGraph() {
  * 对指定的 MR 运行完整的 review 流程。
  *
  * @param {Object} opts
- * @param {string} opts.projectId  - GitLab project ID (数字 或 "namespace/project")
- * @param {string} opts.mrIid      - MR IID（数字字符串）
+ * @param {string}  opts.projectId  - GitLab project ID (数字 或 "namespace/project")
+ * @param {string}  opts.mrIid      - MR IID（数字字符串）
+ * @param {AbortSignal} [opts.signal] - 可选 AbortSignal，支持外部取消（如 Ctrl+C）
  * @returns {Promise<import("../state.js").ReviewState>}
  */
-export async function runReview({ projectId, mrIid }) {
+export async function runReview({ projectId, mrIid, signal } = {}) {
   const graph = buildGraph();
   const initialState = createInitialState({
     mr_id: mrIid,
@@ -163,8 +164,8 @@ export async function runReview({ projectId, mrIid }) {
   });
 
   const finalState = await graph.invoke(initialState, {
-    // Optional: configure run
     recursionLimit: 50,
+    signal,
   });
 
   return finalState;

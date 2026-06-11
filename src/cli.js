@@ -70,6 +70,28 @@ function parseArgs() {
 async function main() {
   const opts = parseArgs();
 
+  // ── 跨平台优雅退出 (CTRL+C) ──────────────────────────────────────────
+  const ac = new AbortController();
+
+  const onSigInt = () => {
+    if (ac.signal.aborted) {
+      // 第二次 Ctrl+C — 强制退出
+      console.log("\nForce exiting...");
+      process.exit(1);
+    }
+    console.log("\n⚠️  SIGINT received. Aborting review gracefully...");
+    console.log("   Press Ctrl+C again to force exit.");
+    ac.abort();
+  };
+
+  process.on("SIGINT", onSigInt);
+
+  // Windows: also support Ctrl+Break
+  if (process.platform === "win32") {
+    process.on("SIGBREAK", onSigInt);
+  }
+
+  // ── Run Review ───────────────────────────────────────────────────────
   console.log(`🧠 dev-mind CLI — Reviewing !${opts.mr} in ${opts.project}`);
   console.log("");
 
@@ -79,6 +101,7 @@ async function main() {
     const finalState = await runReview({
       projectId: opts.project,
       mrIid: opts.mr,
+      signal: ac.signal,
     });
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -93,6 +116,10 @@ async function main() {
       console.log(finalState.review_report);
     }
   } catch (err) {
+    if (err.name === "AbortError") {
+      console.log("\n⚠️  Review was aborted by user.");
+      process.exit(130); // 128 + SIGINT(2)
+    }
     console.error("❌ Review failed:", err.message);
     process.exit(1);
   }

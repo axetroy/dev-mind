@@ -109,12 +109,46 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// ─── Graceful Shutdown ───────────────────────────────────────────────────────
+
+/**
+ * 优雅关闭 HTTP Server：
+ * 1. 停止接受新连接
+ * 2. 等待已有请求完成
+ * 3. 超时强制退出（防止进程挂死）
+ */
+function gracefulShutdown(server, signal) {
+  console.log(`\n[${signal}] Shutting down gracefully...`);
+
+  server.close(() => {
+    console.log("HTTP server closed. Goodbye!");
+    process.exit(0);
+  });
+
+  // 10s 超时后强制退出
+  setTimeout(() => {
+    console.error("[shutdown] Forced exit after timeout.");
+    process.exit(1);
+  }, 10_000).unref();
+}
+
 // ─── Start Server ───────────────────────────────────────────────────────────
 
 const PORT = getConfig().PORT;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🧠 dev-mind AI Code Review Agent`);
   console.log(`   Server listening on http://localhost:${PORT}`);
   console.log(`   Environment: ${getConfig().NODE_ENV}`);
 });
+
+// 跨平台信号处理
+//   SIGINT   — Ctrl+C,  所有平台都支持
+//   SIGTERM  — kill,    Unix-only（Windows 上注册无副作用，但不会触发）
+//   SIGBREAK — Ctrl+Break, Windows-only
+process.on("SIGINT",  () => gracefulShutdown(server, "SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown(server, "SIGTERM"));
+
+if (process.platform === "win32") {
+  process.on("SIGBREAK", () => gracefulShutdown(server, "SIGBREAK"));
+}
