@@ -52,8 +52,14 @@
  */
 
 /**
+ * @typedef {Object} ReviewPlanStep
+ * @property {string} action  - 工具名称（对应 TOOL_REGISTRY 中的 key）
+ * @property {Object<string,*>} args - 工具的参数
+ */
+
+/**
  * @typedef {Object} ReviewPlan
- * @property {string[]} steps - ordered list of tool execution steps
+ * @property {ReviewPlanStep[]} steps - ordered list of tool execution steps
  * @property {number} [estimatedSteps]
  */
 

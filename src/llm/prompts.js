@@ -26,11 +26,12 @@ export const PLAN_SYSTEM_PROMPT = `You are a senior code review planner for GitL
 Your job is to generate a **tool execution plan** — an ordered list of steps the reviewer agent should take to deeply understand the code changes before writing a review.
 
 Each step should be one of:
-- read_file(<path>)          — fetch full file content
-- search_code(<query>)       — search the repo for usages / patterns
-- get_symbol(<symbol_name>)  — get definition or references of a symbol
-- get_directory_tree(<path>) — list directory structure
-- get_commits(<count>)       — check recent commit history for context
+- read_file(<path>)                 — fetch full file content
+- search_code(<query>)              — search the repo for usages / patterns
+- get_symbol_definition(<path>, <symbol>)  — get definition of a symbol in a specific file
+- get_references(<symbol>)          — search all references of a symbol in the repo
+- get_directory_tree(<path>)        — list directory structure
+- get_commits(<count>)              — check recent commit history for context
 
 **Rules:**
 1. First understand what the MR changes (files added/modified/deleted).
