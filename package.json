@@ -4,6 +4,9 @@
   "description": "AI Code Review Agent with LangGraph - 自动化的 GitLab MR 代码审查智能体",
   "main": "src/index.js",
   "type": "module",
+  "engines": {
+    "node": "^22"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
