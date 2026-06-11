@@ -16,37 +16,44 @@ import { getConfig } from "../../config.js";
  * @returns {Promise<Partial<import("../../state.js").ReviewState>>}
  */
 export async function toolExecutionNode(state) {
-  const { plan, tool_calls, iteration, files } = state;
+  const { plan, tool_calls, iteration } = state;
   const maxIter = getConfig().MAX_TOOL_ITERATIONS;
 
   // ── Guard: stop conditions ────────────────────────────────────────────
   if (!plan || iteration >= maxIter) {
-    return {
-      decisions: [
-        !plan
-          ? "No plan to execute"
-          : `Reached max tool iterations (${maxIter})`,
-      ],
-    };
+    const reason = !plan ? "No plan to execute" : `Reached max tool iterations (${maxIter})`;
+    console.log("[graph] ▶️ toolExecution | skip —", reason);
+    return { decisions: [reason] };
   }
 
   const remainingSteps = plan.steps.slice(tool_calls.length);
 
   if (remainingSteps.length === 0) {
-    return {
-      decisions: ["All plan steps completed"],
-    };
+    console.log("[graph] ▶️ toolExecution | all steps completed (total:", tool_calls.length, ")");
+    return { decisions: ["All plan steps completed"] };
   }
 
   // ── Execute next step ─────────────────────────────────────────────────
   const step = remainingSteps[0];
+  const total = plan.steps.length;
+  const current = iteration + 1;
+
+  console.log(`[graph] ▶️ toolExecution [${current}/${total}] | ${step.action}(${formatArgs(step.args)})`);
+
+  const startTime = Date.now();
   const result = await callTool(step.action, state, step.args ?? {});
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
   // ── If read_file succeeds, cache the content ───────────────────────────
   const fileContentsUpdate = {};
+  let resultPreview = "";
+
   if (step.action === "read_file" && result.success && step.args.path) {
     fileContentsUpdate[step.args.path] = result.result;
+    resultPreview = ` (${result.result.length} chars)`;
   }
+
+  console.log(`[graph]    └─ [${current}/${total}] ${result.success ? "✅" : "❌"} ${elapsed}s${resultPreview}`);
 
   const newIteration = iteration + 1;
 
@@ -57,8 +64,8 @@ export async function toolExecutionNode(state) {
     current_file: step.args?.path || state.current_file,
     decisions: [
       result.success
-        ? `[${newIteration}/${plan.steps.length}] ✅ ${step.action}(${formatArgs(step.args)})`
-        : `[${newIteration}/${plan.steps.length}] ❌ ${step.action}(${formatArgs(step.args)}): ${result.result}`,
+        ? `[${current}/${total}] ✅ ${step.action}(${formatArgs(step.args)})`
+        : `[${current}/${total}] ❌ ${step.action}(${formatArgs(step.args)}): ${result.result}`,
     ],
   };
 }

@@ -11,14 +11,10 @@
  */
 export async function parseDiffNode(state) {
   const { diff } = state;
+  console.log("[graph] ▶️ parseDiff | files:", diff.length);
 
   // 收集变更摘要
-  const summary = {
-    added: [],
-    modified: [],
-    deleted: [],
-    renamed: [],
-  };
+  const summary = { added: [], modified: [], deleted: [], renamed: [] };
 
   for (const d of diff) {
     switch (d.type) {
@@ -31,7 +27,10 @@ export async function parseDiffNode(state) {
     }
   }
 
-  // 提取每个 diff 中的受影响的符号/函数名（从 context lines 启发式提取）
+  console.log("[graph]    └─ Summary:", summary.added.length + " added,", summary.modified.length + " modified,",
+    summary.deleted.length + " deleted,", summary.renamed.length + " renamed");
+
+  // 提取每个 diff 中的受影响的符号/函数名
   const affectedSymbols = new Set();
   const symbolRe = /^\+\s*(?:export\s+)?(?:async\s+)?(?:function|class|const|let|var)\s+(\w+)/;
 
@@ -46,19 +45,21 @@ export async function parseDiffNode(state) {
     }
   }
 
+  const symList = [...affectedSymbols];
+  if (symList.length) console.log("[graph]    └─ Affected symbols:", symList.join(", "));
+
   // 构建 diff 文本摘要（用于 LLM prompts）
   const diffSummary = buildDiffSummary(diff);
+  console.log("[graph]    └─ Diff summary length:", diffSummary.length, "chars");
+
+  console.log("[graph] ◀️ parseDiff done");
 
   return {
     decisions: [
-      `Parsed ${diff.length} changed files: ` +
-        `${summary.added.length} added, ${summary.modified.length} modified, ` +
-        `${summary.deleted.length} deleted, ${summary.renamed.length} renamed`,
-      affectedSymbols.size > 0
-        ? `Affected symbols: ${[...affectedSymbols].join(", ")}`
-        : "No new symbols detected in diff",
+      `Parsed ${diff.length} changed files: ${summary.added.length} added, ${summary.modified.length} modified, ${summary.deleted.length} deleted, ${summary.renamed.length} renamed`,
+      symList.length > 0 ? `Affected symbols: ${symList.join(", ")}` : "No new symbols detected in diff",
     ],
-    context_chunks: [],   // Reset for fresh context gathering
+    context_chunks: [],
   };
 }
 

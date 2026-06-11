@@ -21,6 +21,8 @@ describe("createInitialState", () => {
     assert.equal(state.plan, null);
     assert.equal(state.iteration, 0);
     assert.deepEqual(state.errors, []);
+    assert.equal(state.diff_refs, null);
+    assert.equal(state.source_branch, null);
   });
 
   it("should set mr_id and project_id when provided", () => {
@@ -46,7 +48,7 @@ describe("CHANNELS", () => {
       "mr_id", "project_id", "diff", "files", "current_file",
       "file_contents", "context_chunks", "issues", "decisions",
       "review_report", "tool_calls", "risk_score", "plan",
-      "iteration", "errors",
+      "iteration", "errors", "source_branch", "diff_refs",
     ];
 
     for (const key of requiredKeys) {
@@ -70,7 +72,7 @@ describe("CHANNELS", () => {
 
   it("should have correct reducer semantics for overwrite channels", () => {
     const overwriteKeys = ["mr_id", "project_id", "diff", "files", "current_file",
-      "review_report", "risk_score", "plan", "iteration"];
+      "review_report", "risk_score", "plan", "iteration", "source_branch", "diff_refs"];
 
     for (const key of overwriteKeys) {
       const reducer = CHANNELS[key].value;

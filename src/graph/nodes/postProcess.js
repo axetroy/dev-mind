@@ -13,15 +13,21 @@ import { deduplicateIssues, calculateRiskScore, formatReviewReport } from "../..
  */
 export async function postProcessNode(state) {
   const { issues } = state;
+  console.log("[graph] ▶️ postProcess | raw issues:", issues.length);
 
   // 1. Deduplicate
   const unique = deduplicateIssues(issues);
+  console.log("[graph]    └─ Dedup:", issues.length, "→", unique.length);
 
   // 2. Calculate risk score
   const riskScore = calculateRiskScore(unique);
+  console.log("[graph]    └─ Risk score:", riskScore, "/ 100");
 
   // 3. Build review report (markdown)
   const reviewReport = formatReviewReport(unique, riskScore);
+  console.log("[graph]    └─ Report length:", reviewReport.length, "chars");
+
+  console.log("[graph] ◀️ postProcess done");
 
   return {
     issues: unique,

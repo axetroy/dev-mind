@@ -14,60 +14,75 @@ import { formatInlineComments } from "../../output/formatter.js";
  */
 export async function gitlabOutputNode(state) {
   const { project_id, mr_id, issues, review_report, risk_score } = state;
+  console.log("[graph] ▶️ gitlabOutput | project:", project_id, "mr:", mr_id);
 
   if (!project_id || !mr_id) {
-    return {
-      errors: ["gitlabOutputNode: missing project_id or mr_id"],
-      decisions: ["Skipped GitLab output — missing project/MR info"],
-    };
+    console.warn("[graph]    └─ Skipping — missing project/MR info");
+    return { errors: ["gitlabOutputNode: missing project_id or mr_id"], decisions: ["Skipped GitLab output — missing project/MR info"] };
   }
 
   const results = [];
 
   // 1. Post main review comment
+  console.log("[graph]    └─ Posting review comment...");
   try {
     const comment = await gitlab.createComment(project_id, mr_id, review_report);
+    console.log("[graph]    └─ ✅ Comment posted, id:", comment.id);
     results.push(`Posted review comment (id: ${comment.id})`);
   } catch (err) {
+    console.error("[graph]    └─ ❌ Failed to post comment:", err.message);
     results.push(`Failed to post review comment: ${err.message}`);
   }
 
   // 2. Post inline comments (for issues with file + line)
+  const diffRefs = state.diff_refs;
   const inlineComments = formatInlineComments(issues);
-  let inlineSuccess = 0;
-  let inlineFail = 0;
+  console.log("[graph]    └─ Inline comments to post:", inlineComments.length);
 
-  // Batch inline comments — GitLab may rate-limit, so we send sequentially
-  for (const ic of inlineComments) {
-    try {
-      await gitlab.createInlineComment(project_id, mr_id, {
-        body: ic.body,
-        path: ic.path,
-        line: ic.line,
-        commitSha: ic.commitSha,
-      });
-      inlineSuccess++;
-    } catch (err) {
-      inlineFail++;
-      // Log but continue with other comments
+  if (inlineComments.length > 0 && !diffRefs) {
+    console.warn("[graph]    └─ ⚠️  No diff_refs available, skipping inline comments");
+    results.push(`Inline comments: 0 posted (missing diff_refs from MR metadata)`);
+  } else {
+    let inlineSuccess = 0;
+    let inlineFail = 0;
+
+    for (const ic of inlineComments) {
+      console.log(`[graph]       └─ Posting inline on ${ic.path}:${ic.line}...`);
+      try {
+        await gitlab.createInlineComment(project_id, mr_id, {
+          body: ic.body,
+          path: ic.path,
+          line: ic.line,
+          position: {
+            base_sha: diffRefs.base_sha,
+            start_sha: diffRefs.start_sha,
+            head_sha: diffRefs.head_sha,
+          },
+        });
+        inlineSuccess++;
+      } catch (err) {
+        inlineFail++;
+        console.error(`[graph]       └─ ❌ Inline failed: ${err.message}`);
+      }
     }
+    results.push(`Inline comments: ${inlineSuccess} posted, ${inlineFail} failed`);
   }
-  results.push(`Inline comments: ${inlineSuccess} posted, ${inlineFail} failed`);
 
   // 3. Set label based on risk score
   try {
     const label = getRiskLabel(risk_score);
     if (label) {
+      console.log("[graph]    └─ Setting MR label:", label);
       await gitlab.setMRLabels(project_id, mr_id, [label]);
       results.push(`Set MR label: "${label}"`);
     }
   } catch (err) {
+    console.error("[graph]    └─ ❌ Label failed:", err.message);
     results.push(`Failed to set MR label: ${err.message}`);
   }
 
-  return {
-    decisions: results,
-  };
+  console.log("[graph] ◀️ gitlabOutput done");
+  return { decisions: results };
 }
 
 /**

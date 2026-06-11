@@ -60,6 +60,13 @@
 // ─── 主 State ──────────────────────────────────────────────────────────────
 
 /**
+ * @typedef {Object} DiffRefs
+ * @property {string} base_sha
+ * @property {string} start_sha
+ * @property {string} head_sha
+ */
+
+/**
  * @typedef {Object} ReviewState
  * @property {string}            mr_id
  * @property {string}            project_id
@@ -77,6 +84,7 @@
  * @property {ReviewPlan|null}   plan
  * @property {number}            iteration
  * @property {string[]}          errors
+ * @property {DiffRefs|null}     diff_refs         - GitLab diff SHA references for inline comments
  */
 
 // ─── 初始状态工厂 ──────────────────────────────────────────────────────────
@@ -106,6 +114,7 @@ export function createInitialState(opts = {}) {
     plan: null,
     iteration: 0,
     errors: [],
+    diff_refs: null,
   };
 }
 
@@ -134,4 +143,5 @@ export const CHANNELS = {
   plan:          { value: overwrite },
   iteration:     { value: overwrite },
   errors:        { value: append },
+  diff_refs:     { value: overwrite },
 };

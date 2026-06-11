@@ -74,18 +74,25 @@ export async function callTool(toolName, state, args = {}) {
   }
 
   try {
+    const startTime = Date.now();
     const result = await entry.run(state, args);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    const resultStr = typeof result === "string" ? result : JSON.stringify(result, null, 2);
+    const previewLen = resultStr.length;
+
+    console.log(`[tool] 🔧 ${toolName}(${JSON.stringify(args)}) → OK (${previewLen} chars, ${elapsed}s)`);
+
     return {
       tool: toolName,
       args,
-      result: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+      result: resultStr,
       success: true,
     };
   } catch (err) {
-    console.error(`[tool] ❌ ${toolName} failed:`);
-    console.error("  Args:", JSON.stringify(args));
-    console.error("  Error:", err.message);
-    if (err.stack) console.error("  Stack:", err.stack.split("\n").slice(0, 3).join("\n"));
+    console.error(`[tool] ❌ ${toolName}(${JSON.stringify(args)}) failed:`);
+    console.error("       Error:", err.message);
+    if (err.stack) console.error("       Stack:", err.stack.split("\n").slice(0, 3).join("\n"));
     return {
       tool: toolName,
       args,

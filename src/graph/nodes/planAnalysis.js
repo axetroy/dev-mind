@@ -15,6 +15,7 @@ import { getToolDescriptions } from "../../tools/index.js";
  */
 export async function planAnalysisNode(state) {
   const { diff, files } = state;
+  console.log("[graph] ▶️ planAnalysis | files:", files.length);
 
   // Build a concise diff summary for the planner
   const diffSummary = diff.map((d) => {
@@ -29,15 +30,17 @@ export async function planAnalysisNode(state) {
   const systemPrompt = `${PLAN_SYSTEM_PROMPT}\n\nAvailable tools:\n${toolsDesc}`;
   const userPrompt = buildPlanPrompt(diffSummary, files);
 
+  console.log("[graph]    └─ Asking LLM to generate plan...");
+
   let plan;
   try {
     const raw = await llmCallJSON(systemPrompt, userPrompt);
-    // Support both { steps: [...] } and direct array
     plan = {
       steps: Array.isArray(raw) ? raw : Array.isArray(raw.steps) ? raw.steps : [],
     };
+    console.log("[graph]    └─ LLM plan:", plan.steps.map((s, i) => `${i+1}. ${s.action}(${JSON.stringify(s.args ?? {})})`).join(" | "));
   } catch (err) {
-    // Fallback: generate a default plan based on changed files
+    console.warn("[graph]    └─ LLM plan failed, using fallback:", err.message);
     plan = {
       steps: files.slice(0, 5).map((f) => ({
         action: "read_file",
@@ -46,10 +49,10 @@ export async function planAnalysisNode(state) {
     };
   }
 
+  console.log("[graph] ◀️ planAnalysis done | steps:", plan.steps.length);
+
   return {
     plan,
-    decisions: [
-      `Generated analysis plan with ${plan.steps.length} steps`,
-    ],
+    decisions: [`Generated analysis plan with ${plan.steps.length} steps`],
   };
 }

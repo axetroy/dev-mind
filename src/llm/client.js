@@ -85,6 +85,8 @@ export async function llmCall(systemPrompt, userPrompt) {
     { role: "human", content: userPrompt },
   ];
 
+  console.log(messages)
+
   console.log("[llm] Calling model:", getModelName());
   console.log("[llm] System prompt length:", systemPrompt.length, "User prompt length:", userPrompt.length);
   console.log("[llm] 📤 Sending request to model API...");

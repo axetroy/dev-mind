@@ -157,7 +157,10 @@ export async function createComment(projectId, mrIid, body) {
  * @param {string} opts.body
  * @param {string} opts.path        - file path
  * @param {number} opts.line        - line number (new)
- * @param {string} opts.commitSha   - commit SHA to pin comment to
+ * @param {Object} opts.position    - GitLab diff position refs
+ * @param {string} opts.position.base_sha
+ * @param {string} opts.position.start_sha
+ * @param {string} opts.position.head_sha
  * @returns {Promise<Object>}
  */
 export async function createInlineComment(projectId, mrIid, opts) {
@@ -169,9 +172,9 @@ export async function createInlineComment(projectId, mrIid, opts) {
         body: opts.body,
         position: {
           position_type: "text",
-          base_sha: opts.commitSha,
-          start_sha: opts.commitSha,
-          head_sha: opts.commitSha,
+          base_sha: opts.position.base_sha,
+          start_sha: opts.position.start_sha,
+          head_sha: opts.position.head_sha,
           new_path: opts.path,
           new_line: opts.line,
         },

@@ -15,6 +15,7 @@ import { chunksToText } from "../../context/retriever.js";
  */
 export async function llmReviewNode(state) {
   const { diff, context_chunks, tool_calls } = state;
+  console.log("[graph] ▶️ llmReview | diff files:", diff.length, "| context chunks:", context_chunks.length);
 
   // ── 1. Build text representations ───────────────────────────────────────
   const diffText = diff
@@ -36,6 +37,8 @@ export async function llmReviewNode(state) {
     .map((tc) => `[${tc.success ? "OK" : "FAIL"}] ${tc.tool}(${JSON.stringify(tc.args)})\n${String(tc.result).slice(0, 500)}`)
     .join("\n\n");
 
+  console.log("[graph]    └─ Prompt sizes: diff=" + truncatedDiff.length + ", context=" + contextText.length + ", tool_results=" + planResults.length);
+
   // ── 2. Call LLM ─────────────────────────────────────────────────────────
   const userPrompt = buildReviewPrompt(truncatedDiff, contextText, planResults);
 
@@ -44,25 +47,22 @@ export async function llmReviewNode(state) {
     const raw = await llmCallJSON(REVIEW_SYSTEM_PROMPT, userPrompt);
     issues = (raw.issues ?? []).map(normalizeIssue);
   } catch (err) {
-    console.error("[llmReview] LLM review failed:");
-    console.error("  Error:", err.message);
-    if (err.stack) console.error("  Stack:", err.stack.split("\n").slice(0, 4).join("\n"));
+    console.error("[llmReview] LLM review failed:", err.message);
     console.error("  Diff length:", truncatedDiff.length, "Context length:", contextText.length);
-
     return {
       errors: [`LLM review failed: ${err.message}`],
       decisions: ["LLM review failed — falling back to empty issues"],
     };
   }
 
+  const critical = issues.filter((i) => i.severity === "critical").length;
+  const warnings = issues.filter((i) => i.severity === "warning").length;
+  const suggestions = issues.filter((i) => i.severity === "suggestion").length;
+  console.log("[graph] ◀️ llmReview done | issues:", issues.length, `(critical:${critical}, warning:${warnings}, suggestion:${suggestions})`);
+
   return {
     issues,
-    decisions: [
-      `LLM review complete: found ${issues.length} issues ` +
-        `(${issues.filter((i) => i.severity === "critical").length} critical, ` +
-        `${issues.filter((i) => i.severity === "warning").length} warnings, ` +
-        `${issues.filter((i) => i.severity === "suggestion").length} suggestions)`,
-    ],
+    decisions: [`LLM review complete: found ${issues.length} issues (${critical} critical, ${warnings} warnings, ${suggestions} suggestions)`],
   };
 }
 

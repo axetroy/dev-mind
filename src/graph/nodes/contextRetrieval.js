@@ -50,15 +50,19 @@ function extractKeywords(diff) {
  */
 export async function contextRetrievalNode(state) {
   const { file_contents, diff, tool_calls } = state;
+  const fileCount = Object.keys(file_contents).length;
+  console.log("[graph] ▶️ contextRetrieval | files:", fileCount);
 
-  if (Object.keys(file_contents).length === 0) {
-    return {
-      decisions: ["No file contents available for context retrieval"],
-    };
+  if (fileCount === 0) {
+    console.log("[graph]    └─ No file contents available");
+    console.log("[graph] ◀️ contextRetrieval done — empty");
+    return { decisions: ["No file contents available for context retrieval"] };
   }
 
   // 1. Chunk files into CodeChunks
+  console.log("[graph]    └─ Chunking", fileCount, "files...");
   const chunks = chunkFiles(file_contents, { maxChunkSize: 200 });
+  console.log("[graph]    └─ Created", chunks.length, "raw chunks");
 
   // 2. Extract keywords from diff for relevance scoring
   const keywords = extractKeywords(diff);
@@ -69,17 +73,21 @@ export async function contextRetrievalNode(state) {
       keywords.push(tc.args.symbol);
     }
   }
+  console.log("[graph]    └─ Keywords for ranking:", keywords.slice(0, 15).join(", "));
 
   // 4. Rank by relevance
   const rankedChunks = rankChunksByRelevance(chunks, keywords);
 
-  // 5. Convert to text (for LLM context)
-  const contextText = chunksToText(rankedChunks, 15);
+  // 5. Filter relevant
+  const relevantChunks = rankedChunks.filter((c) => c.relevanceScore === null || c.relevanceScore > 0);
+  console.log("[graph]    └─ Relevant chunks:", relevantChunks.length, "/", chunks.length);
+
+  console.log("[graph] ◀️ contextRetrieval done");
 
   return {
-    context_chunks: rankedChunks.filter((c) => c.relevanceScore === null || c.relevanceScore > 0),
+    context_chunks: relevantChunks,
     decisions: [
-      `Retrieved ${rankedChunks.length} chunks from ${Object.keys(file_contents).length} files`,
+      `Retrieved ${relevantChunks.length} chunks from ${fileCount} files`,
       `Top keywords: ${keywords.slice(0, 10).join(", ")}`,
     ],
   };
