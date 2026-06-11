@@ -1,0 +1,82 @@
+# =============================================================================
+# dev-mind — Docker Compose
+# =============================================================================
+#
+# 使用方式:
+#   docker compose up -d          # 后台启动
+#   docker compose logs -f        # 查看日志
+#   docker compose down           # 停止
+#
+# 需要在相同目录下创建 .env 文件，或通过 shell 注入环境变量。
+# 参考 .env.example 配置必要的 GITLAB_TOKEN 和 OPENAI_API_KEY。
+# =============================================================================
+
+services:
+  dev-mind:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: dev-mind:latest
+    container_name: dev-mind
+    restart: unless-stopped
+
+    # 映射端口 (宿主机:容器)
+    ports:
+      - "${PORT:-3000}:3000"
+
+    # 从宿主机 .env 或 shell 环境变量注入
+    environment:
+      # ── GitLab ────────────────────────────────────────────────────
+      - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
+      - GITLAB_TOKEN=${GITLAB_TOKEN:?GITLAB_TOKEN is required}
+
+      # ── LLM Provider (OpenAI / 兼容 OpenAI 接口的服务) ────────────
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-16384}
+      - LLM_LANGUAGE=${LLM_LANGUAGE}
+
+      # ── LLM Provider (Anthropic, 可选) ───────────────────────────
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+
+      # ── Proxy (可选) ──────────────────────────────────────────────
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - NO_PROXY=${NO_PROXY}
+
+      # ── Server ────────────────────────────────────────────────────
+      - PORT=3000
+      - NODE_ENV=${NODE_ENV:-production}
+
+      # ── Agent ─────────────────────────────────────────────────────
+      - MAX_TOOL_ITERATIONS=${MAX_TOOL_ITERATIONS:-10}
+      - RISK_THRESHOLD_LOW=${RISK_THRESHOLD_LOW:-30}
+      - RISK_THRESHOLD_HIGH=${RISK_THRESHOLD_HIGH:-70}
+
+    # 健康检查（与 Dockerfile HEALTHCHECK 配合）
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # 资源限制（可调整）
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
