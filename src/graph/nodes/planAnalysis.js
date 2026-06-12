@@ -8,6 +8,7 @@
 import { llmCallJSON } from "../../llm/client.js";
 import { PLAN_SYSTEM_PROMPT, buildPlanPrompt } from "../../llm/prompts.js";
 import { getToolDescriptions } from "../../tools/index.js";
+import { getLogger } from "../../logger/index.js";
 
 /**
  * @param {import("../../state.js").ReviewState} state
@@ -15,7 +16,7 @@ import { getToolDescriptions } from "../../tools/index.js";
  */
 export async function planAnalysisNode(state) {
   const { diff, files } = state;
-  console.log("[graph] ▶️ planAnalysis | files:", files.length);
+  const log = getLogger(state.run_id);
 
   // Build a concise diff summary for the planner
   const diffSummary = diff.map((d) => {
@@ -30,17 +31,21 @@ export async function planAnalysisNode(state) {
   const systemPrompt = `${PLAN_SYSTEM_PROMPT}\n\nAvailable tools:\n${toolsDesc}`;
   const userPrompt = buildPlanPrompt(diffSummary, files);
 
-  console.log("[graph]    └─ Asking LLM to generate plan...");
+  log.progress("Asking LLM to generate plan...");
 
   let plan;
   try {
+    log.llmCall("planner", userPrompt, { files: files.length });
+    const startTime = Date.now();
     const raw = await llmCallJSON(systemPrompt, userPrompt);
+    const elapsed = Date.now() - startTime;
     plan = {
       steps: Array.isArray(raw) ? raw : Array.isArray(raw.steps) ? raw.steps : [],
     };
-    console.log("[graph]    └─ LLM plan:", plan.steps.map((s, i) => `${i+1}. ${s.action}(${JSON.stringify(s.args ?? {})})`).join(" | "));
+    log.llmResponse("planner", JSON.stringify(raw), elapsed, { steps: plan.steps.length });
+    log.info(`LLM plan: ${plan.steps.map((s, i) => `${i+1}. ${s.action}(${JSON.stringify(s.args ?? {})})`).join(" | ")}`);
   } catch (err) {
-    console.warn("[graph]    └─ LLM plan failed, using fallback:", err.message);
+    log.warn(`LLM plan failed, using fallback: ${err.message}`);
     plan = {
       steps: files.slice(0, 5).map((f) => ({
         action: "read_file",
@@ -49,7 +54,7 @@ export async function planAnalysisNode(state) {
     };
   }
 
-  console.log("[graph] ◀️ planAnalysis done | steps:", plan.steps.length);
+  log.info(`done | steps: ${plan.steps.length}`);
 
   return {
     plan,

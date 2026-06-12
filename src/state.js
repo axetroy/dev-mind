@@ -75,6 +75,7 @@
 
 /**
  * @typedef {Object} ReviewState
+ * @property {string}            run_id            - 唯一运行标识（用于日志关联）
  * @property {string}            mr_id
  * @property {string}            project_id
  * @property {Diff[]}            diff
@@ -105,6 +106,7 @@
  */
 export function createInitialState(opts = {}) {
   return {
+    run_id: opts.run_id ?? "",
     mr_id: opts.mr_id ?? "",
     project_id: opts.project_id ?? "",
     diff: [],
@@ -134,6 +136,7 @@ const mergeRecord = (prev, next) => ({ ...(prev ?? {}), ...(next ?? {}) });
 
 /** @type {Record<string, {value: Function}>} */
 export const CHANNELS = {
+  run_id:        { value: overwrite },
   mr_id:         { value: overwrite },
   project_id:    { value: overwrite },
   diff:          { value: overwrite },

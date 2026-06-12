@@ -6,6 +6,7 @@ describe("createInitialState", () => {
   it("should return default values when called without options", () => {
     const state = createInitialState();
 
+    assert.equal(state.run_id, "");
     assert.equal(state.mr_id, "");
     assert.equal(state.project_id, "");
     assert.deepEqual(state.diff, []);
@@ -45,7 +46,7 @@ describe("createInitialState", () => {
 describe("CHANNELS", () => {
   it("should have entries for all state keys", () => {
     const requiredKeys = [
-      "mr_id", "project_id", "diff", "files", "current_file",
+      "run_id", "mr_id", "project_id", "diff", "files", "current_file",
       "file_contents", "context_chunks", "issues", "decisions",
       "review_report", "tool_calls", "risk_score", "plan",
       "iteration", "errors", "source_branch", "diff_refs",
@@ -71,7 +72,7 @@ describe("CHANNELS", () => {
   });
 
   it("should have correct reducer semantics for overwrite channels", () => {
-    const overwriteKeys = ["mr_id", "project_id", "diff", "files", "current_file",
+    const overwriteKeys = ["run_id", "mr_id", "project_id", "diff", "files", "current_file",
       "review_report", "risk_score", "plan", "iteration", "source_branch", "diff_refs"];
 
     for (const key of overwriteKeys) {

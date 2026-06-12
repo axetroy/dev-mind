@@ -6,6 +6,7 @@
  */
 
 import * as gitlab from "../../tools/gitlab.js";
+import { getLogger } from "../../logger/index.js";
 
 /**
  * @param {import("../../state.js").ReviewState} state
@@ -13,22 +14,22 @@ import * as gitlab from "../../tools/gitlab.js";
  */
 export async function fetchMRNode(state) {
   const { project_id, mr_id } = state;
-  console.log("[graph] ▶️ fetchMR | project:", project_id, "mr:", mr_id);
+  const log = getLogger(state.run_id);
 
   if (!project_id || !mr_id) {
     throw new Error("fetchMRNode: project_id and mr_id are required in state");
   }
 
   // 1. Fetch MR metadata
-  console.log("[graph]    └─ Fetching MR metadata...");
+  log.progress("Fetching MR metadata...");
   const mr = await gitlab.getMergeRequest(project_id, mr_id);
-  console.log("[graph]    └─ MR title:", mr.title, "| source_branch:", mr.source_branch);
+  log.info(`MR title: ${mr.title} | source_branch: ${mr.source_branch}`);
 
   // 2. Fetch diff (changes)
-  console.log("[graph]    └─ Fetching MR diff...");
+  log.progress("Fetching MR diff...");
   const changesData = await gitlab.getMergeRequestDiff(project_id, mr_id);
   const changes = changesData?.changes ?? [];
-  console.log("[graph]    └─ Changes count:", changes.length);
+  log.info(`Changes count: ${changes.length}`);
 
   // 3. Parse diff into our Diff structure
   const diff = changes.map((change) => ({
@@ -44,16 +45,16 @@ export async function fetchMRNode(state) {
   // 5. Extract diff_refs (SHA references for inline comments)
   const diffRefs = mr.diff_refs ?? null;
   if (diffRefs) {
-    console.log("[graph]    └─ diff_refs: base=", diffRefs.base_sha, "start=", diffRefs.start_sha, "head=", diffRefs.head_sha);
+    log.info(`diff_refs: base=${diffRefs.base_sha} start=${diffRefs.start_sha} head=${diffRefs.head_sha}`);
   } else {
-    console.warn("[graph]    └─ diff_refs not available in MR response");
+    log.warn("diff_refs not available in MR response");
   }
 
   const decisions = [
     `Fetched MR !${mr_id}: "${mr.title ?? "(no title)"}" (source: ${mr.source_branch ?? "?"})`,
     `Total changes: ${files.length} files`,
   ];
-  console.log("[graph] ◀️ fetchMR done | files:", files.length, "| hunks total:", diff.reduce((s, d) => s + d.hunks.length, 0));
+  log.info(`done — files: ${files.length} | hunks: ${diff.reduce((s, d) => s + d.hunks.length, 0)}`);
 
   return { diff, files, source_branch: mr.source_branch ?? null, diff_refs: diffRefs, file_contents: {}, current_file: files[0] ?? null, decisions };
 }

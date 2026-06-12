@@ -10,6 +10,7 @@
 
 import { callTool, TOOL_REGISTRY } from "../../tools/index.js";
 import { getConfig } from "../../config.js";
+import { getLogger } from "../../logger/index.js";
 
 /**
  * @param {import("../../state.js").ReviewState} state
@@ -18,18 +19,19 @@ import { getConfig } from "../../config.js";
 export async function toolExecutionNode(state) {
   const { plan, tool_calls, iteration } = state;
   const maxIter = getConfig().MAX_TOOL_ITERATIONS;
+  const log = getLogger(state.run_id);
 
   // ── Guard: stop conditions ────────────────────────────────────────────
   if (!plan || iteration >= maxIter) {
     const reason = !plan ? "No plan to execute" : `Reached max tool iterations (${maxIter})`;
-    console.log("[graph] ▶️ toolExecution | skip —", reason);
+    log.info(`skip — ${reason}`);
     return { decisions: [reason] };
   }
 
   const remainingSteps = plan.steps.slice(tool_calls.length);
 
   if (remainingSteps.length === 0) {
-    console.log("[graph] ▶️ toolExecution | all steps completed (total:", tool_calls.length, ")");
+    log.info(`all steps completed (total: ${tool_calls.length})`);
     return { decisions: ["All plan steps completed"] };
   }
 
@@ -38,11 +40,14 @@ export async function toolExecutionNode(state) {
   const total = plan.steps.length;
   const current = iteration + 1;
 
-  console.log(`[graph] ▶️ toolExecution [${current}/${total}] | ${step.action}(${formatArgs(step.args)})`);
+  log.progress(`[${current}/${total}] ${step.action}(${formatArgs(step.args)})`);
 
+  // Tool call tracing
+  log.toolCall(step.action, step.args);
   const startTime = Date.now();
   const result = await callTool(step.action, state, step.args ?? {});
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  const elapsed = Date.now() - startTime;
+  log.toolResult(step.action, result.result, elapsed);
 
   // ── If read_file succeeds, cache the content ───────────────────────────
   const fileContentsUpdate = {};
@@ -52,8 +57,6 @@ export async function toolExecutionNode(state) {
     fileContentsUpdate[step.args.path] = result.result;
     resultPreview = ` (${result.result.length} chars)`;
   }
-
-  console.log(`[graph]    └─ [${current}/${total}] ${result.success ? "✅" : "❌"} ${elapsed}s${resultPreview}`);
 
   const newIteration = iteration + 1;
 

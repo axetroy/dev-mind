@@ -5,13 +5,15 @@
  * 将 raw diff 解析为结构化信息：提取关键变更块、受影响的符号。
  */
 
+import { getLogger } from "../../logger/index.js";
+
 /**
  * @param {import("../../state.js").ReviewState} state
  * @returns {Promise<Partial<import("../../state.js").ReviewState>>}
  */
 export async function parseDiffNode(state) {
   const { diff } = state;
-  console.log("[graph] ▶️ parseDiff | files:", diff.length);
+  const log = getLogger(state.run_id);
 
   // 收集变更摘要
   const summary = { added: [], modified: [], deleted: [], renamed: [] };
@@ -27,8 +29,7 @@ export async function parseDiffNode(state) {
     }
   }
 
-  console.log("[graph]    └─ Summary:", summary.added.length + " added,", summary.modified.length + " modified,",
-    summary.deleted.length + " deleted,", summary.renamed.length + " renamed");
+  log.info(`Summary: ${summary.added.length} added, ${summary.modified.length} modified, ${summary.deleted.length} deleted, ${summary.renamed.length} renamed`);
 
   // 提取每个 diff 中的受影响的符号/函数名
   const affectedSymbols = new Set();
@@ -46,13 +47,11 @@ export async function parseDiffNode(state) {
   }
 
   const symList = [...affectedSymbols];
-  if (symList.length) console.log("[graph]    └─ Affected symbols:", symList.join(", "));
+  if (symList.length) log.info(`Affected symbols: ${symList.join(", ")}`);
 
   // 构建 diff 文本摘要（用于 LLM prompts）
   const diffSummary = buildDiffSummary(diff);
-  console.log("[graph]    └─ Diff summary length:", diffSummary.length, "chars");
-
-  console.log("[graph] ◀️ parseDiff done");
+  log.info(`Diff summary length: ${diffSummary.length} chars`);
 
   return {
     decisions: [

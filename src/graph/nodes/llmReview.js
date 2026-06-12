@@ -8,6 +8,7 @@
 import { llmCallJSON } from "../../llm/client.js";
 import { REVIEW_SYSTEM_PROMPT, buildReviewPrompt } from "../../llm/prompts.js";
 import { chunksToText } from "../../context/retriever.js";
+import { getLogger } from "../../logger/index.js";
 
 /**
  * @param {import("../../state.js").ReviewState} state
@@ -15,7 +16,7 @@ import { chunksToText } from "../../context/retriever.js";
  */
 export async function llmReviewNode(state) {
   const { diff, context_chunks, tool_calls } = state;
-  console.log("[graph] ▶️ llmReview | diff files:", diff.length, "| context chunks:", context_chunks.length);
+  const log = getLogger(state.run_id);
 
   // ── 1. Build text representations ───────────────────────────────────────
   const diffText = diff
@@ -37,18 +38,22 @@ export async function llmReviewNode(state) {
     .map((tc) => `[${tc.success ? "OK" : "FAIL"}] ${tc.tool}(${JSON.stringify(tc.args)})\n${String(tc.result).slice(0, 500)}`)
     .join("\n\n");
 
-  console.log("[graph]    └─ Prompt sizes: diff=" + truncatedDiff.length + ", context=" + contextText.length + ", tool_results=" + planResults.length);
+  log.info(`Prompt sizes: diff=${truncatedDiff.length}, context=${contextText.length}, tool_results=${planResults.length}`);
 
   // ── 2. Call LLM ─────────────────────────────────────────────────────────
   const userPrompt = buildReviewPrompt(truncatedDiff, contextText, planResults);
 
   let issues;
   try {
+    // LLM tracing via logger
+    log.llmCall("review", userPrompt, { diff_length: truncatedDiff.length, context_length: contextText.length });
+    const startTime = Date.now();
     const raw = await llmCallJSON(REVIEW_SYSTEM_PROMPT, userPrompt);
+    const latency = Date.now() - startTime;
     issues = (raw.issues ?? []).map(normalizeIssue);
+    log.llmResponse("review", JSON.stringify(raw), latency, { issue_count: issues.length });
   } catch (err) {
-    console.error("[llmReview] LLM review failed:", err.message);
-    console.error("  Diff length:", truncatedDiff.length, "Context length:", contextText.length);
+    log.error(`LLM review failed: ${err.message}`, { diff_length: truncatedDiff.length, context_length: contextText.length });
     return {
       errors: [`LLM review failed: ${err.message}`],
       decisions: ["LLM review failed — falling back to empty issues"],
@@ -58,7 +63,7 @@ export async function llmReviewNode(state) {
   const critical = issues.filter((i) => i.severity === "critical").length;
   const warnings = issues.filter((i) => i.severity === "warning").length;
   const suggestions = issues.filter((i) => i.severity === "suggestion").length;
-  console.log("[graph] ◀️ llmReview done | issues:", issues.length, `(critical:${critical}, warning:${warnings}, suggestion:${suggestions})`);
+  log.info(`done | issues: ${issues.length} (critical:${critical}, warning:${warnings}, suggestion:${suggestions})`);
 
   return {
     issues,

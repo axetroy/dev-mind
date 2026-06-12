@@ -20,6 +20,7 @@
  *                             END
  */
 
+import { randomUUID } from "node:crypto";
 import { StateGraph, END } from "@langchain/langgraph";
 import { CHANNELS, createInitialState } from "../state.js";
 import { fetchMRNode } from "./nodes/fetchMR.js";
@@ -31,6 +32,7 @@ import { llmReviewNode } from "./nodes/llmReview.js";
 import { postProcessNode } from "./nodes/postProcess.js";
 import { gitlabOutputNode } from "./nodes/gitlabOutput.js";
 import { getConfig } from "../config.js";
+import { withNodeLogging, createRunLogger, getLogger } from "../logger/index.js";
 
 // ─── Node Names ─────────────────────────────────────────────────────────────
 
@@ -104,15 +106,15 @@ export function buildGraph() {
 
   const workflow = new StateGraph({ channels: CHANNELS });
 
-  // ── Add nodes ──────────────────────────────────────────────────────────
-  workflow.addNode(N.FETCH_MR,      fetchMRNode);
-  workflow.addNode(N.PARSE_DIFF,    parseDiffNode);
-  workflow.addNode(N.PLAN,          planAnalysisNode);
-  workflow.addNode(N.TOOL_EXEC,     toolExecutionNode);
-  workflow.addNode(N.CONTEXT,       contextRetrievalNode);
-  workflow.addNode(N.LLM_REVIEW,    llmReviewNode);
-  workflow.addNode(N.POST_PROCESS,  postProcessNode);
-  workflow.addNode(N.GITLAB_OUTPUT, gitlabOutputNode);
+  // ── Add nodes (auto-wrapped with lifecycle logging) ─────────────────────
+  workflow.addNode(N.FETCH_MR,      withNodeLogging(N.FETCH_MR,      fetchMRNode));
+  workflow.addNode(N.PARSE_DIFF,    withNodeLogging(N.PARSE_DIFF,    parseDiffNode));
+  workflow.addNode(N.PLAN,          withNodeLogging(N.PLAN,          planAnalysisNode));
+  workflow.addNode(N.TOOL_EXEC,     withNodeLogging(N.TOOL_EXEC,     toolExecutionNode));
+  workflow.addNode(N.CONTEXT,       withNodeLogging(N.CONTEXT,       contextRetrievalNode));
+  workflow.addNode(N.LLM_REVIEW,    withNodeLogging(N.LLM_REVIEW,    llmReviewNode));
+  workflow.addNode(N.POST_PROCESS,  withNodeLogging(N.POST_PROCESS,  postProcessNode));
+  workflow.addNode(N.GITLAB_OUTPUT, withNodeLogging(N.GITLAB_OUTPUT, gitlabOutputNode));
 
   // ── Edges ──────────────────────────────────────────────────────────────
   workflow.setEntryPoint(N.FETCH_MR);
@@ -157,16 +159,42 @@ export function buildGraph() {
  * @returns {Promise<import("../state.js").ReviewState>}
  */
 export async function runReview({ projectId, mrIid, signal } = {}) {
+  // ── 创建 per-run logger ───────────────────────────────────────────────
+  const runId = `review-${randomUUID().slice(0, 8)}`;
+  const logger = createRunLogger(runId);
+  logger.info("🚀 runReview started", { projectId, mrIid });
+
   const graph = buildGraph();
   const initialState = createInitialState({
+    run_id: runId,
     mr_id: mrIid,
     project_id: projectId,
   });
 
-  const finalState = await graph.invoke(initialState, {
-    recursionLimit: 50,
-    signal,
-  });
+  const startTime = Date.now();
 
-  return finalState;
+  try {
+    const finalState = await graph.invoke(initialState, {
+      recursionLimit: 50,
+      signal,
+    });
+
+    const elapsed = Date.now() - startTime;
+    logger.info(`✅ Review completed in ${elapsed}ms`, {
+      duration_ms: elapsed,
+      total_issues: finalState.issues?.length ?? 0,
+      risk_score: finalState.risk_score,
+    });
+
+    return finalState;
+  } catch (err) {
+    logger.error(`❌ Review failed: ${err.message}`, {
+      error: err.message,
+      stack: err.stack,
+      duration_ms: Date.now() - startTime,
+    });
+    throw err;
+  } finally {
+    logger.close();
+  }
 }
