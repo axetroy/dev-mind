@@ -27,7 +27,8 @@
  * @typedef {Object} Issue
  * @property {"bug"|"security"|"performance"|"maintainability"|"architecture"} type
  * @property {string} file
- * @property {number} line
+ * @property {number} line               - 新文件行号（new_line）
+ * @property {number} [oldLine]           - 旧文件行号（old_line，可选）
  * @property {string} message
  * @property {string} [suggestion]
  * @property {"critical"|"warning"|"suggestion"} severity

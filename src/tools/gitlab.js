@@ -69,7 +69,8 @@ import { getConfig } from "../config.js";
  * @typedef {Object} InlineCommentOptions
  * @property {string}   body               - 评论内容
  * @property {string}   path               - 文件路径
- * @property {number}   line               - 行号（new_line）
+ * @property {number}   line               - 行号（new_line，作为 old_line 的 fallback）
+ * @property {number}   [oldLine]          - 旧文件行号（可选，默认同 line）
  * @property {DiffRefs} position           - diff 引用 (base/start/head sha)
  */
 
@@ -323,7 +324,13 @@ export async function createComment(projectId, mrIid, body) {
 export async function createInlineComment(projectId, mrIid, opts) {
   // Build position using camelCase keys to match @gitbeaker/rest's DiscussionNotePositionOptions (Camelize<schema>)
   // The library internally calls decamelizeKeys() and then qs.stringify() to produce position[...] form fields.
-  // old_path must be explicitly set (same as new_path) — GitLab's line_code hash uses it.
+  //
+  // GitLab computes line_code SERVER-SIDE from (old_path, new_path, old_line, new_line).
+  // We provide ALL four fields so GitLab can compute line_code correctly.
+  // Prior error "没有 line_code 这个参数" was caused by missing old_line.
+  // Do NOT send lineCode/lineRange — GitLab rejects them with schema validation errors.
+  const oldLine = opts.oldLine ?? opts.line;
+
   const position = {
     positionType: "text",
     baseSha: opts.position.base_sha,
@@ -332,11 +339,11 @@ export async function createInlineComment(projectId, mrIid, opts) {
     newPath: opts.path,
     oldPath: opts.path,
     newLine: opts.line,
+    oldLine,
   };
 
-  // Debug: log the position being sent (first 500 chars)
-  const posPreview = JSON.stringify(position);
-  console.log(`[gitlab] createInlineComment position: ${posPreview.slice(0, 500)}`);
+  // Debug: log the position being sent
+  console.log(`[gitlab] createInlineComment position:`, JSON.stringify(position));
 
   return wrap(
     (

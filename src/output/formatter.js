@@ -21,7 +21,7 @@ export function formatReviewReport(issues, riskScore) {
  * 生成 inline comments 列表，供 GitLab 逐个提交。
  * @param {import("../state.js").Issue[]} issues
  * @param {string} [commitSha] - 可选，关联到具体 commit
- * @returns {Array<{body:string, path:string, line:number, commitSha?:string}>}
+ * @returns {Array<{body:string, path:string, line:number, oldLine?:number, commitSha?:string}>}
  */
 export function formatInlineComments(issues, commitSha) {
   return issues
@@ -32,6 +32,7 @@ export function formatInlineComments(issues, commitSha) {
       }`,
       path: issue.file,
       line: issue.line,
+      oldLine: issue.oldLine,
       commitSha,
     }));
 }
