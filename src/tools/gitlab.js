@@ -326,11 +326,17 @@ export async function createInlineComment(projectId, mrIid, opts) {
   // The library internally calls decamelizeKeys() and then qs.stringify() to produce position[...] form fields.
   //
   // GitLab computes line_code SERVER-SIDE from (old_path, new_path, old_line, new_line).
-  // We provide ALL four fields so GitLab can compute line_code correctly.
-  // Prior error "没有 line_code 这个参数" was caused by missing old_line.
+  //
+  // Rules for oldLine:
+  //   - Context / deleted lines: oldLine is the corresponding old-file line number → include both old_line & new_line
+  //   - Added lines (findOldLine returns null): send ONLY new_line, NO old_line
+  //   - Lines outside diff range: skip entirely (handled upstream by findOldLine returning null)
+  //
+  // Prior error "没有 line_code 这个参数" was caused by missing old_line on context lines.
+  // Current error "line_code 不能为空字符" was caused by sending oldLine for lines outside the diff
+  //   (findOldLine bug returning false positive for trailing empty string from split("\n")).
+  //
   // Do NOT send lineCode/lineRange — GitLab rejects them with schema validation errors.
-  const oldLine = opts.oldLine ?? opts.line;
-
   const position = {
     positionType: "text",
     baseSha: opts.position.base_sha,
@@ -339,8 +345,13 @@ export async function createInlineComment(projectId, mrIid, opts) {
     newPath: opts.path,
     oldPath: opts.path,
     newLine: opts.line,
-    oldLine,
   };
+
+  // Only include oldLine when it's explicitly provided (non-null).
+  // For added lines / lines not in diff (null), omit it so GitLab computes line_code from new_line alone.
+  if (opts.oldLine != null) {
+    position.oldLine = opts.oldLine;
+  }
 
   // Debug: log the position being sent
   console.log(`[gitlab] createInlineComment position:`, JSON.stringify(position));

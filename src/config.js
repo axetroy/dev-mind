@@ -45,6 +45,13 @@ const envSchema = z.object({
   MAX_TOOL_ITERATIONS: z.coerce.number().default(10),
   RISK_THRESHOLD_LOW: z.coerce.number().default(30),
   RISK_THRESHOLD_HIGH: z.coerce.number().default(70),
+
+  // GitLab output
+  INLINE_COMMENTS_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true")
+    .describe("是否在 MR 的 diff 上逐行张贴 inline comment。设为 false 则只在 MR 评论区输出汇总报告"),
 });
 
 // ─── Parse ─────────────────────────────────────────────────────────────────
