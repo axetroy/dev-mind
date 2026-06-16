@@ -371,10 +371,10 @@ export async function createInlineComment(projectId, mrIid, opts) {
 }
 
 /**
- * 设置 MR 标签。
+ * 给 MR 添加标签（追加，不会覆盖已有标签）。
  *
- * 通过 PUT merge_requests/:id 接口设置标签。
- * 已有标签会被替换（非追加）。
+ * 通过 PUT merge_requests/:id 接口的 add_labels 参数追加标签。
+ * 注意：如果标签已存在，GitLab 会自动去重。
  *
  * @param {string}   projectId - 项目 ID
  * @param {string}   mrIid     - MR IID
@@ -383,10 +383,10 @@ export async function createInlineComment(projectId, mrIid, opts) {
  */
 export async function setMRLabels(projectId, mrIid, labels) {
   return wrap(
-    (/** @type {string} */ a, /** @type {string} */ b, /** @type {{ labels: string }} */ opts) =>
+    (/** @type {string} */ a, /** @type {string */ b, /** @type {{ add_labels: string }} */ opts) =>
       getApi().MergeRequests.edit(a, b, opts),
     projectId,
     mrIid,
-    { labels: labels.join(",") },
+    { add_labels: labels.join(",") },
   );
 }

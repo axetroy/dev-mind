@@ -42,12 +42,13 @@ export async function toolExecutionNode(state) {
 
   log.progress(`[${current}/${total}] ${step.action}(${formatArgs(step.args)})`);
 
-  // Tool call tracing
-  log.toolCall(step.action, step.args);
+  // Tool call tracing — 记录输入参数
+  log.toolCall(step.action, step.args, { iteration: current, step: current, total });
   const startTime = Date.now();
   const result = await callTool(step.action, state, step.args ?? {});
   const elapsed = Date.now() - startTime;
-  log.toolResult(step.action, result.result, elapsed);
+  // 记录输出结果 + 成功/失败标志
+  log.toolResult(step.action, result.result, elapsed, result.success);
 
   // ── If read_file succeeds, cache the content ───────────────────────────
   const fileContentsUpdate = {};

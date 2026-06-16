@@ -110,15 +110,15 @@ describe("buildPlanPrompt", () => {
 // ─── buildReviewPrompt ──────────────────────────────────────────────────────
 
 describe("buildReviewPrompt", () => {
-  it("should include diff, context, and plan results sections", () => {
-    const prompt = buildReviewPrompt("diff-content", "ctx-content", "plan-results");
+  it("should include diff, tool results, and needs_more_info hint", () => {
+    const prompt = buildReviewPrompt("diff-content", "plan-results");
     assert.ok(prompt.includes("Diff"));
-    assert.ok(prompt.includes("Retrieved Context"));
     assert.ok(prompt.includes("Tool Execution Results"));
+    assert.ok(prompt.includes("needs_more_info"));
   });
 
-  it("should show fallback text when context is empty", () => {
-    const prompt = buildReviewPrompt("diff", "", "");
-    assert.ok(prompt.includes("No additional context retrieved"));
+  it("should show fallback text when tool results are empty", () => {
+    const prompt = buildReviewPrompt("diff", "");
+    assert.ok(prompt.includes("No prior tool calls"));
   });
 });

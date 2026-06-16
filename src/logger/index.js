@@ -27,7 +27,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile } from "node:fs/promises";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 
@@ -35,7 +36,6 @@ import process from "node:process";
 
 const LOG_DIR = join(process.cwd(), "logs");
 const LEVEL_NUM = { debug: 0, info: 1, warn: 2, error: 3 };
-const LEVEL_PAD = { debug: "DEBUG", info: "INFO ", warn: "WARN ", error: "ERROR" };
 
 // ─── Module-scoped loggers ──────────────────────────────────────────────────
 
@@ -148,10 +148,8 @@ export function createRunLogger(runId, options = {}) {
 
   const logFile = join(LOG_DIR, `run-${runId}.ndjson`);
   let seq = 0;
-  let fileReady = false;
-
-  // 确保日志目录存在
-  mkdir(LOG_DIR, { recursive: true }).then(() => { fileReady = true; }).catch(() => {});
+  // 确保日志目录存在（同步创建，避免 fileReady 竞态）
+  try { mkdirSync(LOG_DIR, { recursive: true }); } catch {}
 
   /**
    * 写入一条日志。
@@ -179,9 +177,7 @@ export function createRunLogger(runId, options = {}) {
     if (options.onWrite) options.onWrite(entry);
 
     // JSONL 文件（静默写入，不阻塞）
-    if (fileReady) {
-      appendFile(logFile, JSON.stringify(entry) + "\n").catch(() => {});
-    }
+    appendFile(logFile, JSON.stringify(entry) + "\n").catch(() => {});
 
     // stdout
     if (!options.silent) {
@@ -227,15 +223,29 @@ export function createRunLogger(runId, options = {}) {
     },
 
     // ── Tool Tracing ──────────────────────────────────────────────────
-    toolCall(toolName, params) {
-      write("info", "tool_call", toolName, `🛠️  ${toolName}`, params);
+    toolCall(toolName, params, meta) {
+      write("info", "tool_call", toolName, `🛠️  ${toolName}`, {
+        _type: "tool_input",
+        args: params,
+        ...(meta ?? {}),
+      });
     },
 
-    toolResult(toolName, result, durationMs) {
-      const summary = typeof result === "string"
-        ? (result.length > 300 ? result.slice(0, 300) + "…" : result)
-        : `[${typeof result}]`;
-      write("info", "tool_result", toolName, `✅ ${toolName} (${durationMs}ms)`, { summary }, durationMs);
+    toolResult(toolName, result, durationMs, success = true) {
+      const resultStr = typeof result === "string"
+        ? result
+        : (typeof result === "object" ? JSON.stringify(result) : String(result));
+      const summary = resultStr.length > 300
+        ? resultStr.slice(0, 300) + "…"
+        : (resultStr || `[${typeof result}]`);
+      write("info", "tool_result", toolName, `✅ ${toolName} (${durationMs}ms, ${resultStr.length} chars)`, {
+        _type: "tool_output",
+        success,
+        result_length: resultStr.length,
+        result_type: typeof result,
+        summary,
+        output: resultStr.length > 5000 ? resultStr.slice(0, 5000) + "…" : resultStr,
+      }, durationMs);
     },
 
     // ── 清理 ──────────────────────────────────────────────────────────

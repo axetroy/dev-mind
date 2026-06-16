@@ -1,0 +1,91 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // ── Server ─────────────────────────────────────────────────────────────
+    {
+      "name": "🖥️  Dev Server (—watch + debug)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--watch"],
+      "program": "src/index.js",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
+      "restart": true,
+      "killBehavior": "polite"
+    },
+    {
+      "name": "▶️  Launch Server",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "program": "src/index.js",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    // ── CLI ────────────────────────────────────────────────────────────────
+    {
+      "name": "🔍  Run Review (CLI)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "program": "src/cli.js",
+      "args": [
+        "--project", "${input:gitlabProject}",
+        "--mr", "${input:mrIid}"
+      ],
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    // ── Test ────────────────────────────────────────────────────────────────
+    {
+      "name": "🧪  Run All Tests",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--test"],
+      "program": "",
+      "args": ["src/**/*.test.js"],
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "🧪  Debug Current Test File",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--test"],
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    // ── Attach ──────────────────────────────────────────────────────────────
+    {
+      "name": "🔗  Attach to Process",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "${workspaceFolder}"
+    }
+  ],
+  // ── Input prompts（CLI 启动时弹出对话框输入参数） ──────────────────────
+  "inputs": [
+    {
+      "id": "gitlabProject",
+      "type": "promptString",
+      "description": "GitLab project ID or path (e.g. namespace/repo)"
+    },
+    {
+      "id": "mrIid",
+      "type": "promptString",
+      "description": "MR IID (e.g. 42)"
+    }
+  ]
+}

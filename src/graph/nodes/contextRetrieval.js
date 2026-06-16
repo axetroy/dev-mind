@@ -1,92 +1,35 @@
 /**
  * dev-mind Context Retrieval Node
  *
- * 对应 design.md §4.5 Context Retrieval Node。
- * 将文件内容分块、按相关性排序，构建 LLM 可用的上下文。
-
- * 做三件事：
- * 1. chunk code
- * 2. embed (optional)
- * 3. filter relevant parts
+ * 将结构化 diff 转换为带行号的 unified diff 文本，
+ * 供 llmReviewNode 直接使用。不再注入上下文到提示词，
+ * 模型如需查看上下文将通过 needs_more_info 工具调用来获取。
  */
 
-import { chunkFiles, rankChunksByRelevance, chunksToText } from "../../context/retriever.js";
+import { diffToUnifiedText } from "./llmReview.js";
 import { getLogger } from "../../logger/index.js";
-
-/**
- * 从 diff 文本中提取关键词（用于相关性评分）。
- * @param {import("../../state.js").Diff[]} diff
- * @returns {string[]}
- */
-function extractKeywords(diff) {
-  const words = new Set();
-  const keywordRe = /\b([A-Z]\w+|[a-z]+(?:[A-Z]\w+)+)\b/g; // camelCase & PascalCase
-  // Also grab identifiers from added lines
-  const identRe = /\b([a-zA-Z_$][\w$.]*)\b/g;
-
-  for (const d of diff) {
-    for (const hunk of d.hunks) {
-      // Scan added lines for identifiers
-      for (const line of hunk.content.split("\n")) {
-        if (line.startsWith("+") && !line.startsWith("+++")) {
-          let m;
-          while ((m = identRe.exec(line)) !== null) {
-            const word = m[1];
-            // Filter out short/common words
-            if (word.length > 2 && !["const","let","var","function","return","import","export","default","async","await"].includes(word)) {
-              words.add(word);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return [...words].slice(0, 30); // limit to top 30 keywords
-}
 
 /**
  * @param {import("../../state.js").ReviewState} state
  * @returns {Promise<Partial<import("../../state.js").ReviewState>>}
  */
 export async function contextRetrievalNode(state) {
-  const { file_contents, diff, tool_calls } = state;
+  const { diff, file_contents } = state;
   const fileCount = Object.keys(file_contents).length;
   const log = getLogger(state.run_id);
 
-  if (fileCount === 0) {
-    log.warn("No file contents available");
-    return { decisions: ["No file contents available for context retrieval"] };
-  }
+  // 将结构化 diff 转换为标准 Git Unified Diff 文本（带统计摘要 + <details> 折叠）
+  const diffText = diffToUnifiedText(diff);
 
-  // 1. Chunk files into CodeChunks
-  log.progress(`Chunking ${fileCount} files...`);
-  const chunks = chunkFiles(file_contents, { maxChunkSize: 200 });
-  log.info(`Created ${chunks.length} raw chunks`);
-
-  // 2. Extract keywords from diff for relevance scoring
-  const keywords = extractKeywords(diff);
-
-  // 3. Also add any symbol names from tool execution results
-  for (const tc of tool_calls) {
-    if (tc.tool === "get_symbol_definition" && tc.args?.symbol) {
-      keywords.push(tc.args.symbol);
-    }
-  }
-  log.info(`Keywords for ranking: ${keywords.slice(0, 15).join(", ")}`);
-
-  // 4. Rank by relevance
-  const rankedChunks = rankChunksByRelevance(chunks, keywords);
-
-  // 5. Filter relevant
-  const relevantChunks = rankedChunks.filter((c) => c.relevanceScore === null || c.relevanceScore > 0);
-  log.info(`Relevant chunks: ${relevantChunks.length} / ${chunks.length}`);
+  log.info(`Converted ${diff.length} diff files to unified diff text (${diffText.length} chars)`);
 
   return {
-    context_chunks: relevantChunks,
+    diff_text: diffText,
     decisions: [
-      `Retrieved ${relevantChunks.length} chunks from ${fileCount} files`,
-      `Top keywords: ${keywords.slice(0, 10).join(", ")}`,
+      `Converted ${diff.length} diff file(s) to unified diff text`,
+      ...(fileCount > 0
+        ? [`${fileCount} file(s) available for tool-based context retrieval`]
+        : ["No file contents available — LLM must use tools to read files if needed"]),
     ],
   };
 }

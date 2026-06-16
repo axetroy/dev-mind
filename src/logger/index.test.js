@@ -242,39 +242,56 @@ describe("logger entry structure", () => {
     assert.equal(e.data.tokens, 100);
   });
 
-  it("toolCall should write event=tool_call with params", () => {
+  it("toolCall should write event=tool_call with args and metadata", () => {
     const { logger, collect } = testLogger(uniqueId("tc"));
-    logger.toolCall("read_file", { path: "src/a.js" });
+    logger.toolCall("read_file", { path: "src/a.js" }, { iteration: 1 });
     const e = last(collect);
     assert.equal(e.event, "tool_call");
     assert.equal(e.node, "read_file");
-    assert.deepEqual(e.data, { path: "src/a.js" });
+    assert.equal(e.data._type, "tool_input");
+    assert.deepEqual(e.data.args, { path: "src/a.js" });
+    assert.equal(e.data.iteration, 1);
   });
 
-  it("toolResult should write event=tool_result with duration", () => {
+  it("toolResult should write event=tool_result with full output", () => {
     const { logger, collect } = testLogger(uniqueId("tr"));
-    logger.toolResult("read_file", "file content here", 500);
+    logger.toolResult("read_file", "file content here", 500, true);
     const e = last(collect);
     assert.equal(e.event, "tool_result");
     assert.equal(e.node, "read_file");
     assert.equal(e.duration_ms, 500);
-    assert.ok(e.data.summary);
+    assert.equal(e.data._type, "tool_output");
+    assert.equal(e.data.success, true);
+    assert.equal(e.data.result_length, 17);
+    assert.equal(e.data.result_type, "string");
+    assert.equal(e.data.summary, "file content here");
+    assert.equal(e.data.output, "file content here");
   });
 
-  it("toolResult should truncate long strings in summary", () => {
+  it("toolResult should truncate long strings in summary and output", () => {
     const { logger, collect } = testLogger(uniqueId("tr-long"));
     const longResult = "x".repeat(500);
-    logger.toolResult("searchCode", longResult, 100);
+    logger.toolResult("searchCode", longResult, 100, true);
     const e = last(collect);
-    assert.ok(e.data.summary.endsWith("…"), "long result should be truncated");
-    assert.ok(e.data.summary.length <= 305); // 300 + "…"
+    // summary truncated at 300
+    assert.ok(e.data.summary.endsWith("…"), "long summary should be truncated");
+    assert.ok(e.data.summary.length <= 305);
+    // output truncated at 5000 (500 < 5000, so not truncated here)
+    assert.equal(e.data.output.length, 500);
+    assert.equal(e.data.output, longResult);
+    // metadata
+    assert.equal(e.data.result_length, 500);
+    assert.equal(e.data.success, true);
   });
 
-  it("toolResult should handle non-string results", () => {
+  it("toolResult should handle non-string results with JSON serialization", () => {
     const { logger, collect } = testLogger(uniqueId("tr-obj"));
-    logger.toolResult("parseCode", { lines: 42 }, 200);
+    logger.toolResult("parseCode", { lines: 42 }, 200, false);
     const e = last(collect);
-    assert.equal(e.data.summary, "[object]");
+    assert.equal(e.data.result_type, "object");
+    assert.equal(e.data.success, false);
+    assert.ok(e.data.summary.includes("lines"));
+    assert.ok(e.data.output.includes("lines"));
   });
 
   it("close should write finish log and remove from registry", () => {

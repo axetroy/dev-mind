@@ -70,31 +70,33 @@ export const REVIEW_SYSTEM_PROMPT = `You are a senior GitLab code reviewer with 
 3. Be precise: include file path, line number, and actionable suggestion.
 4. Rate each issue: "critical", "warning", or "suggestion".
 5. If you are not confident about something, say so.
+6. If the diff and context are INSUFFICIENT to make a proper review (e.g., you need to read additional files or search for more code), you MAY set **"needs_more_info": true** and include a **"next_plan"** array of additional tool steps to gather more context. You can use: read_file(&lt;path&gt;), search_code(&lt;query&gt;), get_symbol_definition(&lt;path&gt;, &lt;symbol&gt;), get_references(&lt;symbol&gt;), get_directory_tree(&lt;path&gt;). Provide 1-5 focused steps.
 
 You MUST output a JSON object (and nothing else) with this shape:
 {
-  "issues": [
-    {
-      "type": "bug|security|performance|maintainability|architecture",
-      "file": "path/to/file.js",
-      "line": 42,
-      "message": "Short description of the problem",
-      "suggestion": "How to fix it (code or explanation)",
-      "severity": "critical|warning|suggestion"
-    }
+  "issues": [...],
+  "needs_more_info": false,
+  "next_plan": [
+    { "action": "read_file", "args": { "path": "..." } }
   ]
+}
+
+Each issue in the "issues" array:
+{
+  "type": "bug|security|performance|maintainability|architecture",
+  "file": "path/to/file.js",
+  "line": 42,
+  "message": "Short description of the problem",
+  "suggestion": "How to fix it (code or explanation)",
+  "severity": "critical|warning|suggestion"
 }`;
 
-export function buildReviewPrompt(diffText, contextChunksText, planResultsText) {
+export function buildReviewPrompt(diffText, planResultsText) {
   return `## Diff
 
 \`\`\`diff
 ${diffText}
 \`\`\`
-
-## Retrieved Context
-
-${contextChunksText || "(No additional context retrieved)"}
 
 ## Tool Execution Results
 
@@ -103,6 +105,7 @@ ${planResultsText || "(No prior tool calls)"}
 ## Task
 
 Review the above Merge Request diff. For each issue, provide the file, line, message, suggestion, and severity.
+If you need to read files, search code, or look up additional context to make a proper review, set "needs_more_info": true and provide a "next_plan" — you will have the opportunity to gather more information and re-review.
 Output a JSON object with an "issues" array.`;
 }
 

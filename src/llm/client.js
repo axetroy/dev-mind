@@ -75,9 +75,10 @@ export function getModel() {
  *
  * @param {string} systemPrompt - System message content
  * @param {string} userPrompt   - Human message content
+ * @param {object} [logger]     - Optional logger instance for structured logging
  * @returns {Promise<string>}   - Model text response
  */
-export async function llmCall(systemPrompt, userPrompt) {
+export async function llmCall(systemPrompt, userPrompt, logger) {
   const cfg = getConfig();
   const model = getModel();
   const messages = [
@@ -85,18 +86,19 @@ export async function llmCall(systemPrompt, userPrompt) {
     { role: "human", content: userPrompt },
   ];
 
-  console.log(messages)
+  const log = logger?.info ?? console.log;
+  const logWarn = logger?.warn ?? console.warn;
+  const logErr = logger?.error ?? console.error;
 
-  console.log("[llm] Calling model:", getModelName());
-  console.log("[llm] System prompt length:", systemPrompt.length, "User prompt length:", userPrompt.length);
-  console.log("[llm] 📤 Sending request to model API...");
+  log("Calling model: " + getModelName());
+  log("System prompt length: " + systemPrompt.length + ", User prompt length: " + userPrompt.length);
 
   const startTime = Date.now();
 
   // 心跳：每 15 秒打印一次等待状态，避免看起来像卡死
   const heartbeat = setInterval(() => {
     const waited = ((Date.now() - startTime) / 1000).toFixed(0);
-    console.log(`[llm] ⏳ Still waiting for model response... (${waited}s elapsed)`);
+    log("Still waiting for model response... (" + waited + "s elapsed)");
   }, 15000);
 
   try {
@@ -104,36 +106,19 @@ export async function llmCall(systemPrompt, userPrompt) {
     clearInterval(heartbeat);
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    // ── 详细记录响应结构 ─────────────────────────────────────────────────
-    const contentType = typeof response.content;
-    const isContentArray = Array.isArray(response.content);
-    const contentLength = isContentArray
-      ? response.content.length
-      : (response.content ?? "").length;
+    log("Response received in " + elapsed + "s");
 
-    console.log(`[llm] Response received in ${elapsed}s`);
-    console.log(`[llm] Response type:`, response.constructor?.name ?? typeof response);
-    console.log(`[llm] Response keys:`, Object.keys(response).join(", "));
-    console.log(`[llm] content type: ${contentType}, isArray: ${isContentArray}, length: ${contentLength}`);
-    console.log(`[llm] response.content (raw):`, JSON.stringify(response.content).slice(0, 500));
-    console.log(`[llm] response.additional_kwargs:`, JSON.stringify(response.additional_kwargs ?? {}).slice(0, 300));
-    console.log(`[llm] response.usage_metadata:`, JSON.stringify(response.usage_metadata ?? {}).slice(0, 300));
-    console.log(`[llm] response.response_metadata:`, JSON.stringify(response.response_metadata ?? {}).slice(0, 500));
-
-    // ── 检查是否被截断 ────────────────────────────────────────────────────
+    // 检查是否被截断
     const finishReason = response.response_metadata?.finish_reason;
     if (finishReason === "length") {
-      console.warn("[llm] ⚠️  Response was TRUNCATED (finish_reason='length').");
-      console.warn(`[llm]    Max tokens: ${cfg.LLM_MAX_TOKENS}, Consider increasing LLM_MAX_TOKENS.`);
-      console.warn(`[llm]    Output tokens used: ${response.usage_metadata?.output_tokens ?? "?"}`);
+      logWarn("Response was TRUNCATED (finish_reason='length'). Max tokens: " + cfg.LLM_MAX_TOKENS + ", Consider increasing LLM_MAX_TOKENS.");
     }
 
-    // ── 提取文本内容 ─────────────────────────────────────────────────────
+    // 提取文本内容
     let textContent = "";
     if (typeof response.content === "string") {
       textContent = response.content;
     } else if (Array.isArray(response.content)) {
-      // LangChain 多模态格式: [{ type: "text", text: "..." }, ...]
       textContent = response.content
         .filter((b) => b.type === "text" || b.text)
         .map((b) => b.text ?? "")
@@ -141,28 +126,21 @@ export async function llmCall(systemPrompt, userPrompt) {
     }
 
     if (!textContent) {
-      console.error("[llm] ⚠️  Model returned empty content!");
-      console.error("[llm] Full response dump:", JSON.stringify(response, null, 2).slice(0, 1000));
+      logErr("Model returned empty content!");
       throw new Error(
-        `Model returned empty response. ` +
-        `Model: ${getModelName()}, ` +
-        `Content type: ${contentType}, ` +
-        `Raw: ${JSON.stringify(response.content).slice(0, 200)}`
+        "Model returned empty response. " +
+        "Model: " + getModelName() + ", " +
+        "Content type: " + typeof response.content + ", " +
+        "Raw: " + JSON.stringify(response.content).slice(0, 200)
       );
     }
 
-    console.log(`[llm] Extracted text length: ${textContent.length}`);
+    log("Extracted text length: " + textContent.length);
     return textContent;
   } catch (err) {
     clearInterval(heartbeat);
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.error(`[llm] ❌ API call failed after ${elapsed}s:`);
-    console.error("  Model:", getModelName());
-    console.error("  Error:", err.message);
-    if (err.status) console.error("  HTTP Status:", err.status);
-    if (err.response) console.error("  Response body:", JSON.stringify(err.response?.data ?? err.response).slice(0, 500));
-    if (err.code) console.error("  Error code:", err.code);
-    if (err.stack) console.error("  Stack:", err.stack.split("\n").slice(0, 6).join("\n"));
+    logErr("API call failed after " + elapsed + "s: " + err.message);
     throw err;
   }
 }
@@ -172,21 +150,14 @@ export async function llmCall(systemPrompt, userPrompt) {
  *
  * @param {string} systemPrompt
  * @param {string} userPrompt
+ * @param {object} [logger]     - Optional logger instance for structured logging
  * @returns {Promise<Object>}
  */
-export async function llmCallJSON(systemPrompt, userPrompt) {
-  const text = await llmCall(systemPrompt, userPrompt);
+export async function llmCallJSON(systemPrompt, userPrompt, logger) {
+  const text = await llmCall(systemPrompt, userPrompt, logger);
 
-  // 打印完整原始响应（前 2000 字符），方便排查
-  console.log("");
-  console.log("╔══════════════════════════════════════════════════════════╗");
-  console.log("║           LLM Raw Response                              ║");
-  console.log("╚══════════════════════════════════════════════════════════╝");
-  console.log(text.slice(0, 2000));
-  if (text.length > 2000) {
-    console.log(`... (truncated, total ${text.length} chars)`);
-  }
-  console.log("");
+  const log = logger?.info ?? console.log;
+  const logErr = logger?.error ?? console.error;
 
   // Try to extract JSON from markdown fence if present
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -194,13 +165,12 @@ export async function llmCallJSON(systemPrompt, userPrompt) {
 
   try {
     const parsed = JSON.parse(raw);
-    console.log("[llm] ✅ JSON parsed successfully, issues count:", parsed.issues?.length ?? 0);
+    log("JSON parsed successfully, issues count: " + (parsed.issues?.length ?? 0));
     return parsed;
   } catch {
-    console.error("[llm] ❌ Failed to parse LLM output as JSON");
-    console.error("[llm] Raw text length:", text.length);
-    console.error("[llm] Attempted JSON input (first 500 chars):");
-    console.error(raw.slice(0, 500));
-    throw new Error(`LLM output is not valid JSON.\nRaw output:\n${raw}`);
+    logErr("Failed to parse LLM output as JSON");
+    logErr("Raw text length: " + text.length);
+    logErr("Attempted JSON input (first 500 chars): " + raw.slice(0, 500));
+    throw new Error("LLM output is not valid JSON.\nRaw output:\n" + raw);
   }
 }

@@ -79,6 +79,7 @@
  * @property {string}            mr_id
  * @property {string}            project_id
  * @property {Diff[]}            diff
+ * @property {string}            diff_text         - diff 的文本表示（contextRetrievalNode 负责转换，llmReviewNode 直接使用）
  * @property {string[]}          files
  * @property {string|null}       source_branch    - MR 的源分支（用于读取文件）
  * @property {string|null}       current_file
@@ -93,6 +94,8 @@
  * @property {number}            iteration
  * @property {string[]}          errors
  * @property {DiffRefs|null}     diff_refs         - GitLab diff SHA references for inline comments
+ * @property {boolean}           needs_more_info   - LLM review 标记：需要更多信息时回 tool execution 循环
+ * @property {ReviewPlanStep[]|null} next_plan     - LLM 要求的下轮工具步骤（配合 needs_more_info 使用）
  */
 
 // ─── 初始状态工厂 ──────────────────────────────────────────────────────────
@@ -110,6 +113,7 @@ export function createInitialState(opts = {}) {
     mr_id: opts.mr_id ?? "",
     project_id: opts.project_id ?? "",
     diff: [],
+    diff_text: "",
     files: [],
     source_branch: null,
     current_file: null,
@@ -124,6 +128,8 @@ export function createInitialState(opts = {}) {
     iteration: 0,
     errors: [],
     diff_refs: null,
+    needs_more_info: false,
+    next_plan: null,
   };
 }
 
@@ -140,6 +146,7 @@ export const CHANNELS = {
   mr_id:         { value: overwrite },
   project_id:    { value: overwrite },
   diff:          { value: overwrite },
+  diff_text:     { value: overwrite },
   files:         { value: overwrite },
   source_branch: { value: overwrite },
   current_file:  { value: overwrite },
@@ -154,4 +161,6 @@ export const CHANNELS = {
   iteration:     { value: overwrite },
   errors:        { value: append },
   diff_refs:     { value: overwrite },
+  needs_more_info:{ value: overwrite },
+  next_plan:     { value: overwrite },
 };

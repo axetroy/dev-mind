@@ -23,7 +23,7 @@ import { formatInlineComments } from "../../output/formatter.js";
  * @param {number} newLine - 新文件行号
  * @returns {number|null} old_line，若该行为新增行则返回 null
  */
-function findOldLine(diff, filePath, newLine) {
+export function findOldLine(diff, filePath, newLine) {
   const entry = diff.find(
     (d) => d.newPath === filePath || d.oldPath === filePath,
   );
@@ -49,7 +49,13 @@ function findOldLine(diff, filePath, newLine) {
       if (curNewLine === newLine) {
         // 目标行是新增行 → 没有 old_line
         if (ch === "+") return null;
-        // 上下文行或删除行 → 返回当前 old_line
+        // 目标行是删除行：该行在旧文件中，不在新文件中
+        // 跳过它继续往后找，因为真正的 newLine 可能是后面的新增行或上下文行
+        if (ch === "-") {
+          oldLine++;
+          continue;
+        }
+        // 上下文行 → 返回当前 old_line
         return oldLine;
       }
 

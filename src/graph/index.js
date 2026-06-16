@@ -72,12 +72,13 @@ function toolRouter(state) {
 
 /**
  * 在 llmReview 后决定下一步。
- * 如果有新的 context 可以继续探索 → 可以回到 toolExecution
+ * 如果 LLM 标记 needs_more_info 且有 next_plan → 回 toolExecution 继续收集
  * 否则 → postProcess
  */
 function reviewRouter(state) {
-  // For now, always proceed to post-process after review.
-  // Future: could loop back to tool execution if LLM requests more info.
+  if (state.needs_more_info === true && state.next_plan?.length > 0) {
+    return N.TOOL_EXEC;
+  }
   return N.POST_PROCESS;
 }
 
@@ -131,9 +132,10 @@ export function buildGraph() {
   workflow.addEdge(N.PLAN,          N.TOOL_EXEC);
   workflow.addEdge(N.CONTEXT,       N.LLM_REVIEW);
 
-  // Conditional: review → post-process (future: may loop back to tools)
+  // Conditional: review → post-process or loop back to tool execution
   workflow.addConditionalEdges(N.LLM_REVIEW, reviewRouter, {
     [N.POST_PROCESS]: N.POST_PROCESS,
+    [N.TOOL_EXEC]:    N.TOOL_EXEC,
   });
 
   // Conditional: output or end

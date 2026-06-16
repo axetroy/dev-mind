@@ -9,10 +9,34 @@ import express from "express";
 import { getConfig } from "./config.js";
 import { buildGraph, runReview } from "./graph/index.js";
 
-// ─── App Setup ──────────────────────────────────────────────────────────────
-
 const app = express();
 app.use(express.json());
+
+// ─── MR 级别去重 ────────────────────────────────────────────────────────────
+
+/**
+ * 记录正在运行 review 的 MR 集合。
+ * key = `${projectId}/${mrIid}`，防止同一 MR 并发执行多次 review。
+ */
+const _runningReviews = new Set();
+
+/**
+ * 检查并标记 MR 为"正在 review"。
+ * @returns {boolean} true=可以开始 review；false=已在运行
+ */
+function tryAcquireMr(projectId, mrIid) {
+  const key = `${projectId}/${mrIid}`;
+  if (_runningReviews.has(key)) return false;
+  _runningReviews.add(key);
+  return true;
+}
+
+/**
+ * 释放 MR 的 review 锁。
+ */
+function releaseMr(projectId, mrIid) {
+  _runningReviews.delete(`${projectId}/${mrIid}`);
+}
 
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
@@ -36,6 +60,14 @@ app.post("/review", async (req, res) => {
     });
   }
 
+  if (!tryAcquireMr(project_id, mr_iid)) {
+    return res.status(409).json({
+      error: "Review already in progress for this MR",
+      project_id,
+      mr_iid,
+    });
+  }
+
   try {
     const finalState = await runReview({
       projectId: project_id,
@@ -54,6 +86,8 @@ app.post("/review", async (req, res) => {
     res.status(500).json({
       error: err.message,
     });
+  } finally {
+    releaseMr(project_id, mr_iid);
   }
 });
 
@@ -88,13 +122,27 @@ app.post("/webhook/gitlab", async (req, res) => {
     return res.status(400).json({ error: "Cannot determine project_id or mr_iid" });
   }
 
+  // 去重：如果该 MR 正在 review 中，跳过本次触发
+  if (!tryAcquireMr(projectId, mrIid)) {
+    return res.status(202).json({
+      status: "skipped",
+      reason: "review already in progress",
+      project_id: projectId,
+      mr_iid: mrIid,
+    });
+  }
+
   // Respond immediately; run review in background
   res.status(202).json({ status: "accepted", project_id: projectId, mr_iid: mrIid });
 
-  // Async review (fire-and-forget with error logging)
-  runReview({ projectId, mrIid: String(mrIid) }).catch((err) => {
-    console.error(`[webhook] Review failed for !${mrIid}:`, err);
-  });
+  // Async review (fire-and-forget with error logging + cleanup)
+  runReview({ projectId, mrIid: String(mrIid) })
+    .catch((err) => {
+      console.error(`[webhook] Review failed for !${mrIid}:`, err);
+    })
+    .finally(() => {
+      releaseMr(projectId, mrIid);
+    });
 });
 
 /**

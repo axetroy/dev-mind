@@ -37,7 +37,7 @@ export async function planAnalysisNode(state) {
   try {
     log.llmCall("planner", userPrompt, { files: files.length });
     const startTime = Date.now();
-    const raw = await llmCallJSON(systemPrompt, userPrompt);
+    const raw = await llmCallJSON(systemPrompt, userPrompt, log);
     const elapsed = Date.now() - startTime;
     plan = {
       steps: Array.isArray(raw) ? raw : Array.isArray(raw.steps) ? raw.steps : [],
